@@ -1,28 +1,39 @@
 import os
 import uuid
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, render_template
 from flask_cors import CORS
 import services
 
-app = Flask(__name__, static_folder="static")
+app = Flask(__name__, static_folder="static", template_folder="templates")
 CORS(app)
 
 AUDIO_DIR = os.path.join(app.root_path, "static", "audio")
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
+# ---------------------------------------------------------------------------
+# ROOT ROUTE: Serves the WhatsApp UI (templates/index.html)
+# ---------------------------------------------------------------------------
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+# Serve audio output files
 @app.route("/static/audio/<filename>")
 def serve_audio(filename):
     return send_from_directory(AUDIO_DIR, filename)
 
+# ---------------------------------------------------------------------------
+# API ENDPOINT: Handles Text, Voice Notes, GPS, and Crop Photo Checks
+# ---------------------------------------------------------------------------
 @app.route("/api/chat", methods=["POST"])
 def chat_api():
     host_url = request.host_url.rstrip('/')
 
+    # IMAGE + MULTILINGUAL VISION & MANDI PIPELINE
     if "image" in request.files:
         image_file = request.files["image"]
         image_bytes = image_file.read()
 
-        # GPS & Form Parameter Fallback Handler
         try:
             lat = float(request.form.get("latitude", services.DEFAULT_LAT))
             lon = float(request.form.get("longitude", services.DEFAULT_LON))
@@ -34,7 +45,6 @@ def chat_api():
         state = request.form.get("state", services.DEFAULT_STATE) or services.DEFAULT_STATE
         lang_code = request.form.get("language_code", "kn-IN") or "kn-IN"
 
-        # Run pipeline with fallbacks
         reply_text = services.inspect_crop_and_recommend_mandi(
             image_bytes=image_bytes,
             farmer_lat=lat,
@@ -43,7 +53,6 @@ def chat_api():
             lang_code=lang_code
         )
 
-        # Generate output audio
         audio_filename = f"crop_advisory_{uuid.uuid4().hex[:8]}.mp3"
         local_output_path = os.path.join(AUDIO_DIR, audio_filename)
         
@@ -55,11 +64,18 @@ def chat_api():
 
         return jsonify({
             "reply_text": reply_text,
-            "reply_audio_url": f"{host_url}/static/audio/{audio_filename}",
-            "applied_coordinates": {"latitude": lat, "longitude": lon}
+            "reply_audio_url": f"{host_url}/static/audio/{audio_filename}"
         })
 
-    return jsonify({"error": "No image provided"}), 400
+    # TEXT MESSAGE HANDLING
+    data = request.get_json(silent=True) or {}
+    if "message" in data:
+        user_msg = data.get("message", "")
+        # Standard query fallback response
+        reply_text = f"Received your query: '{user_msg}'. Send an image or location for market analysis."
+        return jsonify({"reply_text": reply_text})
+
+    return jsonify({"error": "No valid payload received"}), 400
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    app.run(port=int(os.getenv("PORT", 5000)), debug=True)
