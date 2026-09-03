@@ -206,7 +206,7 @@ def answer_general_query(user_query: str, lang_code: str = "en-IN") -> str:
     gemini_client = get_gemini_client()
     
     # Official, currently active model names
-    models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
+    models_to_try = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash"]
     last_error = ""
     
     for model_name in models_to_try:
