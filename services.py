@@ -137,7 +137,7 @@ def inspect_crop_and_recommend_mandi(image_bytes: bytes, farmer_lat: float, farm
     
     try:
         vision_res = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-1.5-flash",
             contents=[types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"), vision_prompt],
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -179,7 +179,7 @@ def inspect_crop_and_recommend_mandi(image_bytes: bytes, farmer_lat: float, farm
 
     try:
         explanation = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-1.5-flash",
             contents=explanation_prompt
         ).text
     except Exception:
@@ -190,6 +190,8 @@ def inspect_crop_and_recommend_mandi(image_bytes: bytes, farmer_lat: float, farm
 # 4. GENERAL TEXT ADVISORY PIPELINE
 # ---------------------------------------------------------------------------
 def answer_general_query(user_query: str, lang_code: str = "en-IN") -> str:
+    gemini_client = get_gemini_client()
+    
     prompt = f"""
     You are an expert AI agricultural advisor helping Indian farmers.
     Answer the following query concisely, accurately, and practically in simple terms.
@@ -199,26 +201,21 @@ def answer_general_query(user_query: str, lang_code: str = "en-IN") -> str:
     """
     
     try:
-        gemini_client = get_gemini_client()
-        
-        # Try primary model
+        # Use gemini-1.5-flash or gemini-2.0-flash
+        response = gemini_client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
+        )
+        return response.text.strip()
+    except Exception as e:
+        print(f"Gemini Text Advisory Error: {e}")
+        # Secondary fallback attempt if gemini-1.5-flash fails
         try:
-            response = gemini_client.models.generate_content(
-                model="gemini-1.5-flash",
-                contents=prompt
-            )
-            return response.text.strip()
-        except Exception as model_err:
-            print(f"Gemini 1.5 Flash failed, trying gemini-2.0-flash... Error: {model_err}")
             response = gemini_client.models.generate_content(
                 model="gemini-2.0-flash",
                 contents=prompt
             )
             return response.text.strip()
-
-    except Exception as e:
-        print(f"--- DETAILED GEMINI ERROR LOG ---")
-        print(f"Exception Type: {type(e).__name__}")
-        print(f"Exception Message: {str(e)}")
-        print(f"---------------------------------")
-        return f"Error connecting to AI advisor: {str(e)}"
+        except Exception as err:
+            print(f"Fallback Error: {err}")
+            return "I am unable to process your agricultural query at the moment. Please try again shortly."
