@@ -190,8 +190,6 @@ def inspect_crop_and_recommend_mandi(image_bytes: bytes, farmer_lat: float, farm
 # 4. GENERAL TEXT ADVISORY PIPELINE
 # ---------------------------------------------------------------------------
 def answer_general_query(user_query: str, lang_code: str = "en-IN") -> str:
-    gemini_client = get_gemini_client()
-    
     prompt = f"""
     You are an expert AI agricultural advisor helping Indian farmers.
     Answer the following query concisely, accurately, and practically in simple terms.
@@ -201,11 +199,26 @@ def answer_general_query(user_query: str, lang_code: str = "en-IN") -> str:
     """
     
     try:
-        response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
-        return response.text.strip()
+        gemini_client = get_gemini_client()
+        
+        # Try primary model
+        try:
+            response = gemini_client.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=prompt
+            )
+            return response.text.strip()
+        except Exception as model_err:
+            print(f"Gemini 1.5 Flash failed, trying gemini-2.0-flash... Error: {model_err}")
+            response = gemini_client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt
+            )
+            return response.text.strip()
+
     except Exception as e:
-        print(f"Gemini Text Advisory Error: {e}")
-        return "I am unable to process your agricultural query at the moment. Please try again shortly."
+        print(f"--- DETAILED GEMINI ERROR LOG ---")
+        print(f"Exception Type: {type(e).__name__}")
+        print(f"Exception Message: {str(e)}")
+        print(f"---------------------------------")
+        return f"Error connecting to AI advisor: {str(e)}"
