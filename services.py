@@ -204,7 +204,7 @@ def answer_general_query(user_query: str, lang_code: str = "en-IN") -> str:
     try:
         gemini_client = get_gemini_client()
         response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=prompt
         )
         return response.text.strip()
