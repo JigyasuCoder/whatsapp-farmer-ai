@@ -192,6 +192,8 @@ def inspect_crop_and_recommend_mandi(image_bytes: bytes, farmer_lat: float, farm
 # ---------------------------------------------------------------------------
 # 4. GENERAL TEXT ADVISORY PIPELINE
 # ---------------------------------------------------------------------------
+import time
+
 def answer_general_query(user_query: str, lang_code: str = "en-IN") -> str:
     prompt = f"""
     You are an expert AI agricultural advisor helping Indian farmers.
@@ -201,14 +203,27 @@ def answer_general_query(user_query: str, lang_code: str = "en-IN") -> str:
     Query: "{user_query}"
     """
     
-    try:
-        gemini_client = get_gemini_client()
-        response = gemini_client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=prompt
-        )
-        return response.text.strip()
-    except Exception as e:
-        print(f"Gemini API Error: {str(e)}")
-        # Return the actual exception message to troubleshoot on UI
-        return f"Gemini Error: {str(e)}"
+    gemini_client = get_gemini_client()
+    # List of models in order of preference
+    models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
+    
+    for model_name in models_to_try:
+        # Retry up to 2 times per model if a 503 occurrs
+        for attempt in range(2):
+            try:
+                response = gemini_client.models.generate_content(
+                    model=model_name,
+                    contents=prompt
+                )
+                return response.text.strip()
+            except Exception as e:
+                error_str = str(e)
+                # If overloaded, wait briefly before retrying
+                if "503" in error_str or "UNAVAILABLE" in error_str:
+                    time.sleep(1)
+                    continue
+                else:
+                    # Move to next model on other errors
+                    break
+                    
+    return "The AI service is experiencing high traffic across models right now. Please try again in a few moments."
