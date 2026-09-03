@@ -186,3 +186,26 @@ def inspect_crop_and_recommend_mandi(image_bytes: bytes, farmer_lat: float, farm
         explanation = f"Crop identified as {crop} ({grade}). Best nearby mandi is {mandi_data['mandi']} with net profit ₹{mandi_data['net_profit']} per ton."
 
     return explanation
+# ---------------------------------------------------------------------------
+# 4. GENERAL TEXT ADVISORY PIPELINE
+# ---------------------------------------------------------------------------
+def answer_general_query(user_query: str, lang_code: str = "en-IN") -> str:
+    gemini_client = get_gemini_client()
+    
+    prompt = f"""
+    You are an expert AI agricultural advisor helping Indian farmers.
+    Answer the following query concisely, accurately, and practically in simple terms.
+    If asked in another language, respond in that language script.
+    
+    Query: "{user_query}"
+    """
+    
+    try:
+        response = gemini_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+        return response.text.strip()
+    except Exception as e:
+        print(f"Gemini Text Advisory Error: {e}")
+        return "I am unable to process your agricultural query at the moment. Please try again shortly."
