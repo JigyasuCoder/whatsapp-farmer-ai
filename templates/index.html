@@ -151,6 +151,7 @@
                 audioChunks = [];
 
                 mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                
                 mediaRecorder.onstop = async () => {
                     const audioBlob = new Blob(audioChunks, { type: 'audio/ogg' });
                     const formData = new FormData();
@@ -162,8 +163,10 @@
                         const res = await fetch("/api/chat", { method: "POST", body: formData });
                         const data = await res.json();
                         
-                        appendMessage("user", `*Transcribed:* ${data.transcript}`);
-                        appendMessage("bot", data.reply_text, null, data.reply_audio_url);
+                        if (data.transcript) {
+                            appendMessage("user", `*Transcribed:* ${data.transcript}`);
+                        }
+                        appendMessage("bot", data.reply_text || "Audio processed.", null, data.reply_audio_url);
                     } catch (e) {
                         appendMessage("bot", "⚠️ Voice processing failed.");
                     }
