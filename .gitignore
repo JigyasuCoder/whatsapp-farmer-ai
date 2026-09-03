@@ -1,0 +1,20 @@
+# Python Virtual Environments & Cache
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Environment Secrets
+.env
+.env.local
+
+# Temporary System Uploads
+/tmp/
+
+# Generated Audio Files (Static output directory)
+static/audio/*.mp3
+
+# IDEs & System Files
+.DS_Store
+.vscode/
+.idea/
