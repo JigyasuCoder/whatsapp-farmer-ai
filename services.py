@@ -4,6 +4,7 @@ import base64
 import requests
 from google import genai
 from google.genai import types
+from dotenv import load_dotenv
 
 # DEFAULT FALLBACK CONSTANTS
 DEFAULT_LAT = 12.9716
@@ -12,13 +13,15 @@ DEFAULT_STATE = "Karnataka"
 DEFAULT_CROP = "Tomato"
 DEFAULT_GRADE = "Grade B"
 
-# LAZY CLIENT INITIALIZATION
-def get_gemini_client():
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY is not set in environment variables.")
-    return genai.Client(api_key=api_key)
+load_dotenv()
 
+def get_gemini_client():
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY environment variable is not set.")
+    
+    from google import genai
+    return genai.Client(api_key=api_key)
 # ---------------------------------------------------------------------------
 # 1. SARVAM AI - TEXT TO SPEECH
 # ---------------------------------------------------------------------------
@@ -190,8 +193,6 @@ def inspect_crop_and_recommend_mandi(image_bytes: bytes, farmer_lat: float, farm
 # 4. GENERAL TEXT ADVISORY PIPELINE
 # ---------------------------------------------------------------------------
 def answer_general_query(user_query: str, lang_code: str = "en-IN") -> str:
-    gemini_client = get_gemini_client()
-    
     prompt = f"""
     You are an expert AI agricultural advisor helping Indian farmers.
     Answer the following query concisely, accurately, and practically in simple terms.
@@ -201,21 +202,13 @@ def answer_general_query(user_query: str, lang_code: str = "en-IN") -> str:
     """
     
     try:
-        # Use gemini-1.5-flash or gemini-2.0-flash
+        gemini_client = get_gemini_client()
         response = gemini_client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             contents=prompt
         )
         return response.text.strip()
     except Exception as e:
-        print(f"Gemini Text Advisory Error: {e}")
-        # Secondary fallback attempt if gemini-1.5-flash fails
-        try:
-            response = gemini_client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt
-            )
-            return response.text.strip()
-        except Exception as err:
-            print(f"Fallback Error: {err}")
-            return "I am unable to process your agricultural query at the moment. Please try again shortly."
+        print(f"Gemini API Error: {str(e)}")
+        # Return the actual exception message to troubleshoot on UI
+        return f"Gemini Error: {str(e)}"
