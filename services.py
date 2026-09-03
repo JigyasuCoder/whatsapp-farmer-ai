@@ -204,26 +204,29 @@ def answer_general_query(user_query: str, lang_code: str = "en-IN") -> str:
     """
     
     gemini_client = get_gemini_client()
-    # List of models in order of preference
+    
+    # Official, currently active model names
     models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
+    last_error = ""
     
     for model_name in models_to_try:
-        # Retry up to 2 times per model if a 503 occurrs
         for attempt in range(2):
             try:
                 response = gemini_client.models.generate_content(
                     model=model_name,
                     contents=prompt
                 )
-                return response.text.strip()
+                if response and response.text:
+                    return response.text.strip()
             except Exception as e:
-                error_str = str(e)
-                # If overloaded, wait briefly before retrying
-                if "503" in error_str or "UNAVAILABLE" in error_str:
+                last_error = str(e)
+                print(f"Attempt failed for model {model_name}: {last_error}")
+                # Wait 1 second on high demand before retrying same model
+                if "503" in last_error or "UNAVAILABLE" in last_error:
                     time.sleep(1)
                     continue
                 else:
-                    # Move to next model on other errors
+                    # On other errors (e.g. 404), break immediately to test the next model
                     break
                     
-    return "The AI service is experiencing high traffic across models right now. Please try again in a few moments."
+    return f"AI Error details: {last_error}"
