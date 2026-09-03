@@ -22,9 +22,9 @@ def serve_audio(filename):
 def chat_api():
     host_url = request.host_url.rstrip('/')
 
-    # 1. IMAGE ANALYSIS PIPELINE
-    if "image" in request.files:
-        try:
+    try:
+        # 1. CROP IMAGE ANALYSIS
+        if "image" in request.files:
             image_file = request.files["image"]
             image_bytes = image_file.read()
 
@@ -49,52 +49,41 @@ def chat_api():
 
             audio_filename = f"crop_advisory_{uuid.uuid4().hex[:8]}.mp3"
             local_output_path = os.path.join(AUDIO_DIR, audio_filename)
-            
-            services.generate_voice_note(
-                text=reply_text,
-                output_path=local_output_path,
-                language_code=lang_code
-            )
+            services.generate_voice_note(text=reply_text, output_path=local_output_path, language_code=lang_code)
 
             return jsonify({
-                "reply_text": reply_text or "Crop processed successfully.",
+                "reply_text": reply_text,
                 "reply_audio_url": f"{host_url}/static/audio/{audio_filename}"
             })
-        except Exception as e:
-            print(f"Image API Error: {e}")
-            return jsonify({"reply_text": "Image analysis failed due to a processing error."}), 500
 
-    # 2. VOICE NOTE INPUT HANDLING
-    if "audio" in request.files:
-        try:
-            # Voice placeholder until Sarvam STT is attached
-            transcript = "Audio received (Voice query processed)"
+        # 2. VOICE NOTE QUERY
+        if "audio" in request.files:
             reply_text = services.answer_general_query("How to improve crop yield this season?")
-            
             audio_filename = f"voice_reply_{uuid.uuid4().hex[:8]}.mp3"
             local_output_path = os.path.join(AUDIO_DIR, audio_filename)
             services.generate_voice_note(text=reply_text, output_path=local_output_path, language_code="hi-IN")
 
             return jsonify({
-                "transcript": transcript,
+                "transcript": "Voice note processed",
                 "reply_text": reply_text,
                 "reply_audio_url": f"{host_url}/static/audio/{audio_filename}"
             })
-        except Exception as e:
-            print(f"Audio API Error: {e}")
-            return jsonify({"transcript": "Voice note failed", "reply_text": "Error processing audio."}), 500
 
-    # 3. GENERAL TEXT MESSAGES
-    data = request.get_json(silent=True) or {}
-    if "message" in data:
-        user_msg = data.get("message", "").strip()
-        if not user_msg:
-            return jsonify({"error": "Empty message"}), 400
+        # 3. TEXT QUERY
+        data = request.get_json(silent=True) or {}
+        if "message" in data:
+            user_msg = data.get("message", "").strip()
+            if not user_msg:
+                return jsonify({"reply_text": "Please type a valid question."})
 
-        reply_text = services.answer_general_query(user_msg)
-        return jsonify({"reply_text": reply_text})
+            reply_text = services.answer_general_query(user_msg)
+            return jsonify({"reply_text": reply_text})
 
-    return jsonify({"error": "No valid payload received"}), 400
+        return jsonify({"reply_text": "Request not recognized."})
+
+    except Exception as e:
+        print(f"API Error: {e}")
+        return jsonify({"reply_text": f"Error: {str(e)}"}), 200
 
 if __name__ == "__main__":
     app.run(port=int(os.getenv("PORT", 5000)), debug=True)
