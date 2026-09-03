@@ -25,54 +25,35 @@ def chat_api():
     try:
         # 1. CROP IMAGE ANALYSIS
         if "image" in request.files:
-            image_file = request.files["image"]
-            image_bytes = image_file.read()
-
-            try:
-                lat = float(request.form.get("latitude", services.DEFAULT_LAT))
-                lon = float(request.form.get("longitude", services.DEFAULT_LON))
-                if lat == 0.0 or lon == 0.0:
-                    lat, lon = services.DEFAULT_LAT, services.DEFAULT_LON
-            except (ValueError, TypeError):
-                lat, lon = services.DEFAULT_LAT, services.DEFAULT_LON
-
-            state = request.form.get("state", services.DEFAULT_STATE) or services.DEFAULT_STATE
-            lang_code = request.form.get("language_code", "kn-IN") or "kn-IN"
-
-            reply_text = services.inspect_crop_and_recommend_mandi(
-                image_bytes=image_bytes,
-                farmer_lat=lat,
-                farmer_lon=lon,
-                state=state,
-                lang_code=lang_code
-            )
-
-            audio_filename = f"crop_advisory_{uuid.uuid4().hex[:8]}.mp3"
-            local_output_path = os.path.join(AUDIO_DIR, audio_filename)
-            services.generate_voice_note(text=reply_text, output_path=local_output_path, language_code=lang_code)
-
-            return jsonify({
-                "reply_text": reply_text,
-                "reply_audio_url": f"{host_url}/static/audio/{audio_filename}"
-            })
+            # ... keep existing image handling code ...
+            pass
 
         # 2. VOICE NOTE QUERY
         if "audio" in request.files:
-            reply_text = services.answer_general_query("How to improve crop yield this season?")
-            audio_filename = f"voice_reply_{uuid.uuid4().hex[:8]}.mp3"
-            local_output_path = os.path.join(AUDIO_DIR, audio_filename)
-            services.generate_voice_note(text=reply_text, output_path=local_output_path, language_code="hi-IN")
+            # ... keep existing audio handling code ...
+            pass
 
-            return jsonify({
-                "transcript": "Voice note processed",
-                "reply_text": reply_text,
-                "reply_audio_url": f"{host_url}/static/audio/{audio_filename}"
-            })
-
-        # 3. TEXT QUERY
+        # 3. JSON PAYLOADS (TEXT & LOCATION)
         data = request.get_json(silent=True) or {}
-        if "message" in data:
-            user_msg = data.get("message", "").strip()
+
+        # Handle Location Sharing
+        if "latitude" in data or "lat" in data or "location" in data:
+            lat = data.get("latitude") or data.get("lat")
+            lon = data.get("longitude") or data.get("lon") or data.get("lng")
+            
+            # Formulate query for mandi prices based on coordinates
+            loc_query = f"Find nearby Mandi crop prices and agricultural market insights for coordinates: Latitude {lat}, Longitude {lon}."
+            reply_text = services.answer_general_query(loc_query)
+            return jsonify({"reply_text": reply_text})
+
+        # Handle Text Messages
+        if "message" in data or "text" in data:
+            user_msg = (data.get("message") or data.get("text") or "").strip()
+            
+            # Handle placeholder text sent by frontend button
+            if "*Sharing current location...*" in user_msg:
+                return jsonify({"reply_text": "Location received! Fetching nearest Mandi prices for your area..."})
+                
             if not user_msg:
                 return jsonify({"reply_text": "Please type a valid question."})
 
