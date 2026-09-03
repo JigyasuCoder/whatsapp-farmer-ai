@@ -5,14 +5,19 @@ import requests
 from google import genai
 from google.genai import types
 
-gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
 # DEFAULT FALLBACK CONSTANTS
 DEFAULT_LAT = 12.9716
 DEFAULT_LON = 77.5946
 DEFAULT_STATE = "Karnataka"
 DEFAULT_CROP = "Tomato"
 DEFAULT_GRADE = "Grade B"
+
+# LAZY CLIENT INITIALIZATION
+def get_gemini_client():
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is not set in environment variables.")
+    return genai.Client(api_key=api_key)
 
 # ---------------------------------------------------------------------------
 # 1. SARVAM AI - TEXT TO SPEECH
@@ -65,7 +70,6 @@ def fetch_mandi_profit_options(farmer_lat: float, farmer_lon: float, state: str,
         res = requests.get(url, timeout=8).json()
         records = res.get("records", [])
         
-        # MANDI DATA FALLBACK: Use estimated regional benchmarks if API yields no records
         if not records:
             base_price = 25.00 * multiplier
             est_distance = 15.0
@@ -86,10 +90,9 @@ def fetch_mandi_profit_options(farmer_lat: float, farmer_lon: float, state: str,
 
         for record in records:
             market_name = record.get("market", "Local Mandi")
-            base_price = float(record.get("modal_price", 2000)) / 100.0  # Convert quintal to kg
+            base_price = float(record.get("modal_price", 2000)) / 100.0
             adjusted_price = base_price * multiplier
 
-            # Distance fallback calculation using GPS coordinates
             distance_km = round((((farmer_lat - (farmer_lat + 0.05))**2 + (farmer_lon - (farmer_lon + 0.05))**2)**0.5) * 111.0, 1)
             transport_cost = round(distance_km * TRANSPORT_RATE_PER_KM, 2)
             gross_revenue = round(adjusted_price * quantity_kg, 2)
@@ -107,8 +110,7 @@ def fetch_mandi_profit_options(farmer_lat: float, farmer_lon: float, state: str,
                 }
         return best_mandi
 
-    except Exception as e:
-        # API Network Error Fallback
+    except Exception:
         return {
             "mandi": "Regional Mandi (Estimated)",
             "price_per_kg": round(20.0 * multiplier, 2),
@@ -122,7 +124,8 @@ def fetch_mandi_profit_options(farmer_lat: float, farmer_lon: float, state: str,
 # 3. VISION & ADVISORY WITH PARSING FALLBACK
 # ---------------------------------------------------------------------------
 def inspect_crop_and_recommend_mandi(image_bytes: bytes, farmer_lat: float, farmer_lon: float, state: str, lang_code: str) -> str:
-    # 1. Vision Detection with Try/Except & JSON Guard
+    gemini_client = get_gemini_client()
+
     vision_prompt = """
     Analyze this crop image and output ONLY a raw JSON object with keys:
     {
@@ -132,7 +135,6 @@ def inspect_crop_and_recommend_mandi(image_bytes: bytes, farmer_lat: float, farm
     }
     """
     
-    crop_info = {}
     try:
         vision_res = gemini_client.models.generate_content(
             model="gemini-2.5-flash",
@@ -142,19 +144,16 @@ def inspect_crop_and_recommend_mandi(image_bytes: bytes, farmer_lat: float, farm
         crop_info = json.loads(vision_res.text)
     except Exception as e:
         print(f"Vision API/Parsing Error: {e}")
-        # Crop Fallback Triggered
         crop_info = {
             "crop": DEFAULT_CROP,
             "grade": DEFAULT_GRADE,
             "quality_reason": "Could not clearly determine crop condition from image; analyzed assuming standard market quality."
         }
 
-    # Ensure JSON keys exist
     crop = crop_info.get("crop", DEFAULT_CROP)
     grade = crop_info.get("grade", DEFAULT_GRADE)
     reason = crop_info.get("quality_reason", "Standard quality crop.")
 
-    # 2. Fetch Mandi Data
     mandi_data = fetch_mandi_profit_options(
         farmer_lat=farmer_lat,
         farmer_lon=farmer_lon,
@@ -163,7 +162,6 @@ def inspect_crop_and_recommend_mandi(image_bytes: bytes, farmer_lat: float, farm
         grade=grade
     )
 
-    # 3. Native Language Summary Generation
     explanation_prompt = f"""
     You are an expert AI agricultural advisor. Generate a simple response for a farmer speaking in language code '{lang_code}'.
     
@@ -184,7 +182,7 @@ def inspect_crop_and_recommend_mandi(image_bytes: bytes, farmer_lat: float, farm
             model="gemini-2.5-flash",
             contents=explanation_prompt
         ).text
-    except Exception as e:
+    except Exception:
         explanation = f"Crop identified as {crop} ({grade}). Best nearby mandi is {mandi_data['mandi']} with net profit ₹{mandi_data['net_profit']} per ton."
 
     return explanation
